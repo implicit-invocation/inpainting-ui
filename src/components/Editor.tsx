@@ -62,10 +62,20 @@ export function Editor({ image, onMaskChange }: EditorProps) {
     };
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const [lastTouchPosition, setLastTouchPosition] = useState({ x: 0, y: 0 });
+
+  const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+    const isTouch = e.type === "touchstart";
+    const clientX = isTouch
+      ? (e as React.TouchEvent).touches[0].clientX
+      : (e as React.MouseEvent).clientX;
+    const clientY = isTouch
+      ? (e as React.TouchEvent).touches[0].clientY
+      : (e as React.MouseEvent).clientY;
+
     // Only handle left clicks and ignore events from controls
     if (
-      e.button !== 0 ||
+      (!isTouch && (e as React.MouseEvent).button !== 0) ||
       (e.target as HTMLElement).tagName === "BUTTON" ||
       (e.target as HTMLElement).tagName === "INPUT"
     )
@@ -74,16 +84,27 @@ export function Editor({ image, onMaskChange }: EditorProps) {
 
     if (activeTool === "pan") {
       setIsDragging(true);
+      if (isTouch) {
+        setLastTouchPosition({ x: clientX, y: clientY });
+      }
     } else if (activeTool === "draw") {
       if (!ctx) return;
       setIsDrawing(true);
-      const { x, y } = getCanvasCoordinates(e.clientX, e.clientY);
+      const { x, y } = getCanvasCoordinates(clientX, clientY);
       ctx.beginPath();
       ctx.moveTo(x, y);
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
+    const isTouch = e.type === "touchmove";
+    const clientX = isTouch
+      ? (e as React.TouchEvent).touches[0].clientX
+      : (e as React.MouseEvent).clientX;
+    const clientY = isTouch
+      ? (e as React.TouchEvent).touches[0].clientY
+      : (e as React.MouseEvent).clientY;
+
     // Ignore events when interacting with controls
     if (
       (e.target as HTMLElement).tagName === "BUTTON" ||
@@ -94,19 +115,29 @@ export function Editor({ image, onMaskChange }: EditorProps) {
 
     if (activeTool === "pan" && isDragging) {
       e.preventDefault();
-      setPosition((prev) => ({
-        x: prev.x + e.movementX,
-        y: prev.y + e.movementY,
-      }));
+      if (isTouch) {
+        const movementX = clientX - lastTouchPosition.x;
+        const movementY = clientY - lastTouchPosition.y;
+        setPosition((prev) => ({
+          x: prev.x + movementX,
+          y: prev.y + movementY,
+        }));
+        setLastTouchPosition({ x: clientX, y: clientY });
+      } else {
+        setPosition((prev) => ({
+          x: prev.x + (e as React.MouseEvent).movementX,
+          y: prev.y + (e as React.MouseEvent).movementY,
+        }));
+      }
     } else if (activeTool === "draw" && isDrawing && ctx) {
-      const { x, y } = getCanvasCoordinates(e.clientX, e.clientY);
+      const { x, y } = getCanvasCoordinates(clientX, clientY);
       ctx.lineTo(x, y);
       ctx.lineWidth = brushSize / zoom;
       ctx.stroke();
     }
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     setIsDragging(false);
     setIsDrawing(false);
     if (canvasRef.current && onMaskChange) {
@@ -127,10 +158,13 @@ export function Editor({ image, onMaskChange }: EditorProps) {
       className="relative h-full w-full overflow-hidden p-0 m-0"
       ref={containerRef}
       onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseDown={handlePointerDown}
+      onTouchStart={handlePointerDown}
+      onMouseMove={handlePointerMove}
+      onTouchMove={handlePointerMove}
+      onMouseUp={handlePointerUp}
+      onTouchEnd={handlePointerUp}
+      onMouseLeave={handlePointerUp}
     >
       <div className="absolute inset-0 p-0 m-0">
         <img
